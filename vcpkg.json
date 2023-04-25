@@ -1,0 +1,12 @@
+{
+    "name": "rtdprocessor",
+    "version-string": "0.1.0",
+    "license": "MIT",
+    "dependencies": [
+      "jsoncpp",
+      "concurrentqueue",
+      "boost-program-options",
+      "websocketpp",
+      "openssl"
+    ]
+  }
