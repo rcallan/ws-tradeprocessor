@@ -30,6 +30,7 @@ int main(int argc, const char* argv[]) {
 
     std::cout << "using dp::thread-pool version " << THREADPOOL_VERSION << " with " << threadCount << " threads" << std::endl;
 
+    // created a thread pool with n - 1 threads since one of the available threads is being used for main
     dp::thread_pool pool(threadCount - 1);
 
     std::mutex mtx;
