@@ -11,11 +11,15 @@
 #include <concurrentqueue/blockingconcurrentqueue.h>
 #include <json/json.h>
 
+#include "spdlog/spdlog.h"
+
 #include "WSSession.hpp"
 #include "Calc.hpp"
 #include "StreamProcessor.hpp"
 
 int main(int argc, const char* argv[]) {
+    // auto logger = spdlog::basic_logger_mt("daily_logger", "logs/daily-log.txt");
+    // logger->info("===== starting application =====");
     unsigned threadCount = std::thread::hardware_concurrency();
 
     threadCount = (threadCount > 0) ? threadCount : 1;
@@ -53,13 +57,16 @@ int main(int argc, const char* argv[]) {
 
     while (true) {
         std::this_thread::sleep_for(std::chrono::seconds(10));
-        std::cout << "approximate size of the queue so far is " << q.size_approx() << std::endl;
+        spdlog::info("approximate size of the queue so far is {}", q.size_approx());
         for (auto& [k, v] : calcInfoMap) {
+            // std::string info {};
             for (std::string& key : keys) {
                 if (key == "maxGap") {
-                    std::cout << k << " - " << key << ": " << v[key] << " ms" << std::endl;
+                    spdlog::info("{} - {}: {:.2f} ms", k, key, v[key]);
+                    // std::cout << k << " - " << key << ": " << v[key] << " ms" << std::endl;
                 } else {
-                    std::cout << k << " - " << key << ": " << v[key] << std::endl;
+                    spdlog::info("{} - {}: {:.2f}", k, key, v[key]);
+                    // std::cout << k << " - " << key << ": " << v[key] << std::endl;
                 }
             }
         }

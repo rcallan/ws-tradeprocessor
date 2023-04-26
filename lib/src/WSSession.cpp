@@ -15,7 +15,7 @@
 namespace po = boost::program_options;
 
 WSSession::WSSession(std::string fileName, std::condition_variable& cv_, moodycamel::BlockingConcurrentQueue<Json::Value>& q_) : cv(cv_), q(q_) {
-    // get logger here
+    // lggr = spdlog::create<spdlog::daily_file_sink_st>("daily_logger", "logs/daily-log.txt");
 
     po::options_description config("Configuration");
     config.add_options()

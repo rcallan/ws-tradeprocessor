@@ -21,6 +21,7 @@ find_package(Boost COMPONENTS program_options REQUIRED)
 # find_package(unofficial-curlpp CONFIG REQUIRED)
 find_package(websocketpp CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
 
 # set(ThreadPool_DIR ${CMAKE_CURRENT_SOURCE_DIR}/build/thread-pool)
 # find_package(dp::thread-pool REQUIRED)
@@ -30,5 +31,6 @@ include_directories(${SHARED_LIB_INCLUDE_DIR})
 
 add_executable(rtdprocessor rtdprocessor.cpp)
 
-target_link_libraries(rtdprocessor PRIVATE curlpp JsonCpp::JsonCpp dp::thread-pool unofficial::concurrentqueue::concurrentqueue websocketpp::websocketpp lib)
+target_link_libraries(rtdprocessor PRIVATE curlpp JsonCpp::JsonCpp dp::thread-pool 
+unofficial::concurrentqueue::concurrentqueue websocketpp::websocketpp lib spdlog::spdlog spdlog::spdlog_header_only)
 
