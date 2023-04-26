@@ -15,18 +15,6 @@
 #include "Calc.hpp"
 #include "StreamProcessor.hpp"
 
-template <typename T>
-void processJson(std::shared_ptr<moodycamel::BlockingConcurrentQueue<Json::Value>> q, T& sp) {
-    Json::Value item;
-    
-    while (true) {
-        q->wait_dequeue(item);
-
-        // std::cout << "symbol" << item["s"] << " price " << item["p"] << " vol " << item["v"] << std::endl;
-        sp.tupleProcess(item);
-    }
-}
-
 int main(int argc, const char* argv[]) {
     unsigned threadCount = std::thread::hardware_concurrency();
 
@@ -40,17 +28,16 @@ int main(int argc, const char* argv[]) {
     std::mutex mtx;
     std::condition_variable condVar;
 
-    auto q = std::make_shared<moodycamel::BlockingConcurrentQueue<Json::Value>>();
-    std::cout << "is the queue lock free on this platform " << q->is_lock_free() << std::endl;
+    moodycamel::BlockingConcurrentQueue<Json::Value> q;
+    std::cout << "is the queue lock free on this platform " << q.is_lock_free() << std::endl;
 
-    auto sess = std::make_shared<WSSession>(argv[1], condVar, q);
+    WSSession sess(argv[1], condVar, q);
     // forms a ws connection with the finhubb server and starts the ASIO io_service run loop
-    pool.enqueue_detach(&WSSession::connect, sess);
+    pool.enqueue_detach(&WSSession::connect, std::ref(sess));
 
-    // send subscription messages once a connection is opened
+    // we wait until we are subscribed before continuing
     std::unique_lock<std::mutex> lck(mtx);
     condVar.wait(lck);
-    sess->subscribe();
 
     typedef std::tuple<MaxTimeGapCalc, VolumeCalc, WeightedAvgPriceCalc, MaxPriceCalc> CalcTypes;
 
@@ -60,7 +47,24 @@ int main(int argc, const char* argv[]) {
 
     // process items which have been submitted to the queue
     // could spawn more processing threads if the queue needs to be processed more quickly
-    pool.enqueue_detach(processJson<StreamProcessor<CalcTypes>>, q, std::ref(sp));
+    pool.enqueue_detach(&StreamProcessor<CalcTypes>::process, std::ref(sp), std::ref(q));
+
+    auto keys = sp.getMapKeys();
+
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::seconds(10));
+        std::cout << "approximate size of the queue so far is " << q.size_approx() << std::endl;
+        for (auto& [k, v] : calcInfoMap) {
+            for (std::string& key : keys) {
+                if (key == "maxGap") {
+                    std::cout << k << " - " << key << ": " << v[key] << " ms" << std::endl;
+                } else {
+                    std::cout << k << " - " << key << ": " << v[key] << std::endl;
+                }
+            }
+        }
+        std::cout << std::endl;
+    }
 
     return 0;
 }

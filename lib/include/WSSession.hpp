@@ -11,7 +11,7 @@
 
 class WSSession {
 public:
-    WSSession(std::string cfgName, std::condition_variable& cv_, std::shared_ptr<moodycamel::BlockingConcurrentQueue<Json::Value>> q_);
+    WSSession(std::string cfgName, std::condition_variable& cv_, moodycamel::BlockingConcurrentQueue<Json::Value>& q_);
 
     void connect();
     void subscribe();
@@ -24,5 +24,5 @@ private:
     std::string token;
     std::vector<std::string> subscriptions;
     std::condition_variable& cv;
-    std::shared_ptr<moodycamel::BlockingConcurrentQueue<Json::Value>> q;
+    moodycamel::BlockingConcurrentQueue<Json::Value>& q;
 };

@@ -44,6 +44,16 @@ public:
 
     void setCalcs(auto cs) {calcs = cs;}
 
+    void process(moodycamel::BlockingConcurrentQueue<Json::Value>& q) {
+        Json::Value item;
+        
+        while (true) {
+            q.wait_dequeue(item);
+
+            tupleProcess(item);
+        }
+    }
+
     template <int n = std::tuple_size<T>::value>
     inline void tupleProcess(Json::Value& entry) {
         if constexpr (n > 1) {
@@ -54,6 +64,7 @@ public:
 
     template <int n = std::tuple_size<T>::value>
     inline void tupleGetMapKeys() {
+        if (mapKeys.size() > 0) return;
         if constexpr (n > 1) {
             tupleGetMapKeys<n - 1>();
         }

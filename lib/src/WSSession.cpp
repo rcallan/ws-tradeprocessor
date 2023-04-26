@@ -14,7 +14,7 @@
 
 namespace po = boost::program_options;
 
-WSSession::WSSession(std::string fileName, std::condition_variable& cv_, std::shared_ptr<moodycamel::BlockingConcurrentQueue<Json::Value>> q_) : cv(cv_), q(q_) {
+WSSession::WSSession(std::string fileName, std::condition_variable& cv_, moodycamel::BlockingConcurrentQueue<Json::Value>& q_) : cv(cv_), q(q_) {
     // get logger here
 
     po::options_description config("Configuration");
@@ -60,14 +60,15 @@ void WSSession::on_message(websocketpp::connection_hdl, websocketpp::client<webs
 
     for (unsigned i = 0; i < completeJsonData["data"].size(); ++i) {
         // std::cout << completeJsonData["data"][i] << std::endl;
-        q->enqueue(completeJsonData["data"][i]);
+        q.enqueue(completeJsonData["data"][i]);
     }
-    std::cout << "approximate size of the queue so far is " << q->size_approx() << std::endl;
 }
 
 void WSSession::on_open(websocketpp::connection_hdl hdl) {
     // would like to use a condition variable here to notify other thread that connection is ready
     std::cout << "connection has been opened" << std::endl;
+    // we can subscribe to symbols since the connection has been made
+    subscribe();
     cv.notify_one();
 }
 
