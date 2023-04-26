@@ -6,6 +6,7 @@ set(VCPKG_TARGET_TRIPLET x64-linux CACHE STRING "Vcpkg target triplet")
 project(rtdprocessor)
 
 set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0)
 

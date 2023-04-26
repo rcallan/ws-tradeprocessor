@@ -12,14 +12,18 @@
 #include <json/json.h>
 
 #include "WSSession.hpp"
+#include "Calc.hpp"
+#include "StreamProcessor.hpp"
 
-void process(std::shared_ptr<moodycamel::BlockingConcurrentQueue<Json::Value>> q) {
+template <typename T>
+void processJson(std::shared_ptr<moodycamel::BlockingConcurrentQueue<Json::Value>> q, T& sp) {
     Json::Value item;
     
     while (true) {
         q->wait_dequeue(item);
 
-        std::cout << "symbol" << item["s"] << " price " << item["p"] << " vol " << item["v"] << std::endl;
+        // std::cout << "symbol" << item["s"] << " price " << item["p"] << " vol " << item["v"] << std::endl;
+        sp.tupleProcess(item);
     }
 }
 
@@ -48,9 +52,15 @@ int main(int argc, const char* argv[]) {
     condVar.wait(lck);
     sess->subscribe();
 
+    typedef std::tuple<MaxTimeGapCalc, VolumeCalc, WeightedAvgPriceCalc, MaxPriceCalc> CalcTypes;
+
+    std::unordered_map<std::string, std::unordered_map<std::string, double>> calcInfoMap;
+
+    StreamProcessor<CalcTypes> sp(calcInfoMap);
+
     // process items which have been submitted to the queue
     // could spawn more processing threads if the queue needs to be processed more quickly
-    pool.enqueue_detach(process, q);
+    pool.enqueue_detach(processJson<StreamProcessor<CalcTypes>>, q, std::ref(sp));
 
     return 0;
 }

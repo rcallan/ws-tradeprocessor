@@ -55,6 +55,7 @@ void WSSession::on_message(websocketpp::connection_hdl, websocketpp::client<webs
 
     curlpp::Cleanup cleaner;
 
+    // could possibly move this into a processing thread and just place raw payloads into the queue
     reader.parse(msg->get_payload(), completeJsonData, false);
 
     for (unsigned i = 0; i < completeJsonData["data"].size(); ++i) {
@@ -128,7 +129,7 @@ void WSSession::connect() {
 }
 
 void WSSession::subscribe() {
-    for (auto& s : subscriptions) {
+    for (const auto& s : subscriptions) {
         websocketpp::lib::error_code ec;
 
         std::cout << "subscribing to " << s << std::endl;
