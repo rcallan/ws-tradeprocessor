@@ -24,7 +24,7 @@ int main(int argc, const char* argv[]) {
 
     threadCount = (threadCount > 0) ? threadCount : 1;
 
-    std::cout << "using dp::thread-pool version " << THREADPOOL_VERSION << " with " << threadCount << " threads" << std::endl;
+    spdlog::info("using dp::thread-pool version {} with {} threads", THREADPOOL_VERSION, threadCount);
 
     // created a thread pool with n - 1 threads since one of the available threads is being used for main
     dp::thread_pool pool(threadCount - 1);
@@ -33,7 +33,7 @@ int main(int argc, const char* argv[]) {
     std::condition_variable condVar;
 
     moodycamel::BlockingConcurrentQueue<Json::Value> q;
-    std::cout << "is the queue lock free on this platform " << q.is_lock_free() << std::endl;
+    spdlog::info("is the queue lock free on this platform {}", q.is_lock_free());
 
     WSSession sess(argv[1], condVar, q);
     // forms a ws connection with the finhubb server and starts the ASIO io_service run loop
@@ -59,16 +59,8 @@ int main(int argc, const char* argv[]) {
         std::this_thread::sleep_for(std::chrono::seconds(10));
         spdlog::info("approximate size of the queue so far is {}", q.size_approx());
         for (auto& [k, v] : calcInfoMap) {
-            // std::string info {};
-            for (std::string& key : keys) {
-                if (key == "maxGap") {
-                    spdlog::info("{} - {}: {:.2f} ms", k, key, v[key]);
-                    // std::cout << k << " - " << key << ": " << v[key] << " ms" << std::endl;
-                } else {
-                    spdlog::info("{} - {}: {:.2f}", k, key, v[key]);
-                    // std::cout << k << " - " << key << ": " << v[key] << std::endl;
-                }
-            }
+            spdlog::info("{} - maxGap: {:.2f} ms, vol: {:.2f}, weightedAvgPrice: {:.2f}, maxPrice {:.2f}", k, 
+                v["maxGap"], v["vol"], v["weightedAvgPrice"], v["maxPrice"]);
         }
         std::cout << std::endl;
     }
