@@ -14,8 +14,8 @@
 template <typename T>
 class Calc {
 public:
-    void process(Json::Value& entry, std::unordered_map<std::string, std::unordered_map<std::string, double>>& calcInfoMap) {
-        static_cast<T*>(this)->processEntry(entry, calcInfoMap);
+    void process(Json::Value& entry, std::unordered_map<std::string, double>& symbolState) {
+        static_cast<T*>(this)->processEntry(entry, symbolState);
     }
 
     std::string getMapKey() {
@@ -25,15 +25,14 @@ public:
 
 class MaxTimeGapCalc : public Calc<MaxTimeGapCalc> {
 public:
-    void processEntry(Json::Value& entry, std::unordered_map<std::string, std::unordered_map<std::string, double>>& calcInfoMap) {
+    void processEntry(Json::Value& entry, std::unordered_map<std::string, double>& symbolState) {
         long ts = entry["t"].asInt64();
-        auto& temp = calcInfoMap[entry["s"].asString()];
-        if (temp.count(mapKey) == 0) {
-            temp[mapKey] = 0;
-        } else if (ts - temp["maxGap.prevTime"] > temp[mapKey]) {
-            temp[mapKey] = ts - temp["maxGap.prevTime"];
+        if (symbolState.count(mapKey) == 0) {
+            symbolState[mapKey] = 0;
+        } else if (ts - symbolState["maxGap.prevTime"] > symbolState[mapKey]) {
+            symbolState[mapKey] = ts - symbolState["maxGap.prevTime"];
         }
-        temp["maxGap.prevTime"] = ts;
+        symbolState["maxGap.prevTime"] = ts;
     }
 
     std::string getCalcMapKey() { return mapKey; }
@@ -44,9 +43,9 @@ private:
 
 class VolumeCalc : public Calc<VolumeCalc> {
 public:
-    void processEntry(Json::Value& entry, std::unordered_map<std::string, std::unordered_map<std::string, double>>& calcInfoMap) {
-        double entryVol = entry["v"].asDouble();
-        calcInfoMap[entry["s"].asString()][mapKey] += entryVol;
+    void processEntry(Json::Value& entry, std::unordered_map<std::string, double>& symbolState) {
+        double vol = entry["v"].asDouble();
+        symbolState[mapKey] += vol;
     }
 
     std::string getCalcMapKey() { return mapKey; }
@@ -57,10 +56,10 @@ private:
 
 class MaxPriceCalc : public Calc<MaxPriceCalc> {
 public:
-    void processEntry(Json::Value& entry, std::unordered_map<std::string, std::unordered_map<std::string, double>>& calcInfoMap) {
+    void processEntry(Json::Value& entry, std::unordered_map<std::string, double>& symbolState) {
         double entryPrice = entry["p"].asDouble();
-        auto& temp = calcInfoMap[entry["s"].asString()][mapKey];
-        if (entryPrice > temp) temp = entryPrice;
+        auto& maxPrice = symbolState[mapKey];
+        if (entryPrice > maxPrice) maxPrice = entryPrice;
     }
 
     std::string getCalcMapKey() { return mapKey; }
@@ -71,14 +70,12 @@ private:
 
 class WeightedAvgPriceCalc : public Calc<WeightedAvgPriceCalc> {
 public:
-    void processEntry(Json::Value& entry, std::unordered_map<std::string, std::unordered_map<std::string, double>>& calcInfoMap) {
+    void processEntry(Json::Value& entry, std::unordered_map<std::string, double>& symbolState) {
         double vol = entry["v"].asDouble();
         double price = entry["p"].asDouble();
-        // std::cout << "price and volume are " << price << " " << vol << std::endl;
-        auto& temp = calcInfoMap[entry["s"].asString()];
-        temp["wap.numer"] += vol * price;
-        temp["wap.denom"] += vol;
-        temp[mapKey] = temp["wap.numer"] / temp["wap.denom"];
+        symbolState["wap.numer"] += vol * price;
+        symbolState["wap.denom"] += vol;
+        symbolState[mapKey] = symbolState["wap.numer"] / symbolState["wap.denom"];
     }
 
     std::string getCalcMapKey() { return mapKey; }

@@ -37,10 +37,10 @@ template<tuple_like T>
 class StreamProcessor {
 public:
     StreamProcessor() = delete;
-    StreamProcessor(auto& cim) : calcInfoMap(cim) { }
-    StreamProcessor(auto& cim, auto cs) : calcs(cs), calcInfoMap(cim) { }
-    StreamProcessor(std::string& rp, auto& cim) : readPath(rp), calcInfoMap(cim) { }
-    StreamProcessor(std::string& rp, auto& cim, auto cs) : readPath(rp), calcs(cs), calcInfoMap(cim) { }
+    StreamProcessor(auto& cim) : symbolStates(cim) { }
+    StreamProcessor(auto& cim, auto cs) : calcs(cs), symbolStates(cim) { }
+    StreamProcessor(std::string& rp, auto& cim) : readPath(rp), symbolStates(cim) { }
+    StreamProcessor(std::string& rp, auto& cim, auto cs) : readPath(rp), calcs(cs), symbolStates(cim) { }
 
     void setCalcs(auto cs) {calcs = cs;}
 
@@ -50,16 +50,20 @@ public:
         while (true) {
             q.wait_dequeue(item);
 
-            tupleProcess(item);
+            const std::string& symbol = item["s"].asString();
+            std::unordered_map<std::string, double>& state = symbolStates[symbol];
+
+            tupleProcess(item, state);
         }
     }
 
     template <int n = std::tuple_size<T>::value>
-    inline void tupleProcess(Json::Value& entry) {
+    inline void tupleProcess(Json::Value& entry, std::unordered_map<std::string, double>& state) {
         if constexpr (n > 1) {
-            tupleProcess<n - 1>(entry);
+            tupleProcess<n - 1>(entry, state);
         }
-        std::get<n - 1>(calcs).process(entry, calcInfoMap);
+        
+        std::get<n - 1>(calcs).process(entry, state);
     }
 
     template <int n = std::tuple_size<T>::value>
@@ -77,14 +81,14 @@ public:
     }
 
     long getCalcInfo(std::string&& symbol, std::string&& key) const {
-        return calcInfoMap[symbol][key];
+        return symbolStates[symbol][key];
     }
 
 private:
     std::string readPath;
     T calcs {};
 
-    std::unordered_map<std::string, std::unordered_map<std::string, double>>& calcInfoMap;
+    std::unordered_map<std::string, std::unordered_map<std::string, double>>& symbolStates;
     std::vector<std::string> mapKeys;
 };
 
