@@ -8,6 +8,7 @@
 #include "Calc.hpp"
 #include <set>
 #include <memory>
+#include "SymbolState.hpp"
 
 #include <json/json.h>
 
@@ -50,15 +51,18 @@ public:
         while (true) {
             q.wait_dequeue(item);
 
+            // std::cout << "processing new entry " << item["s"] << " " << item["t"] << " " << item["v"] << std::endl;
+
             const std::string& symbol = item["s"].asString();
-            std::unordered_map<std::string, double>& state = symbolStates[symbol];
+            SymbolState& state = symbolStates[symbol];
+            state.trades.push_back(item);
 
             tupleProcess(item, state);
         }
     }
 
     template <int n = std::tuple_size<T>::value>
-    inline void tupleProcess(Json::Value& entry, std::unordered_map<std::string, double>& state) {
+    inline void tupleProcess(Json::Value& entry, SymbolState& state) {
         if constexpr (n > 1) {
             tupleProcess<n - 1>(entry, state);
         }
@@ -81,14 +85,14 @@ public:
     }
 
     long getCalcInfo(std::string&& symbol, std::string&& key) const {
-        return symbolStates[symbol][key];
+        return symbolStates[symbol].features[key];
     }
 
 private:
     std::string readPath;
     T calcs {};
 
-    std::unordered_map<std::string, std::unordered_map<std::string, double>>& symbolStates;
+    std::unordered_map<std::string, SymbolState>& symbolStates;
     std::vector<std::string> mapKeys;
 };
 
