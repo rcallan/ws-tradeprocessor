@@ -70,24 +70,6 @@ public:
         std::get<n - 1>(calcs).process(entry, state);
     }
 
-    template <int n = std::tuple_size<T>::value>
-    inline void tupleGetMapKeys() {
-        if (mapKeys.size() > 0) return;
-        if constexpr (n > 1) {
-            tupleGetMapKeys<n - 1>();
-        }
-        mapKeys.emplace_back(std::get<n - 1>(calcs).getMapKey());
-    }
-
-    std::vector<std::string> getMapKeys() {
-        tupleGetMapKeys();
-        return mapKeys;
-    }
-
-    long getCalcInfo(std::string&& symbol, std::string&& key) const {
-        return symbolStates[symbol].features[key];
-    }
-
 private:
     std::string readPath;
     T calcs {};

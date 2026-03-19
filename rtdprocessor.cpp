@@ -17,6 +17,7 @@
 #include "Calc.hpp"
 #include "StreamProcessor.hpp"
 #include "SymbolState.hpp"
+#include "Features.hpp"
 
 int main(int argc, const char* argv[]) {
     // auto logger = spdlog::basic_logger_mt("daily_logger", "logs/daily-log.txt");
@@ -44,6 +45,7 @@ int main(int argc, const char* argv[]) {
     std::unique_lock<std::mutex> lck(mtx);
     condVar.wait(lck);
 
+    // choose which calculators you would like to use here
     typedef std::tuple<
         MaxTimeGapCalc, 
         VolumeCalc, 
@@ -52,30 +54,35 @@ int main(int argc, const char* argv[]) {
         TradespersecCalc
     > CalcTypes;
 
+    // should probably switch to a concurrent map like parlay_hash since processing threads could be reading from it
+    // while a processing thread is writing
     std::unordered_map<std::string, SymbolState> symbolStateMap;
 
     StreamProcessor<CalcTypes> sp(symbolStateMap);
 
     // process items which have been submitted to the queue
     // could spawn more processing threads if the queue needs to be processed more quickly
-    // if using multiple processing threads should probably assign symbols to certain threads
-    // to safely access and write to symbolStateMap
     pool.enqueue_detach(&StreamProcessor<CalcTypes>::process, std::ref(sp), std::ref(q));
-
-    auto keys = sp.getMapKeys();
 
     while (true) {
         std::this_thread::sleep_for(std::chrono::seconds(10));
         spdlog::info("approximate size of the queue so far is {}", q.size_approx());
-        for (const auto& [k, v] : symbolStateMap) {
+        for (auto& [k, v] : symbolStateMap) {
+            Features snapshot;
+
+            {
+                std::lock_guard lock(v.m);
+                snapshot = v.features;
+            }
+
             spdlog::info(
                 "{:<15} | max gap: {:>11.2f} ms | vol: {:>10.2f} | WAP: {:>10.2f} | max price: {:>10.2f} | TPS: {:>8.2f}",
                 k,
-                v.features.at("maxGap"),
-                v.features.at("vol"),
-                v.features.at("weightedAvgPrice"),
-                v.features.at("maxPrice"),
-                v.features.at("tps")
+                snapshot.maxGap,
+                snapshot.vol,
+                snapshot.weightedAvgPrice,
+                snapshot.maxPrice,
+                snapshot.tps
             );
         }
         std::cout << std::endl;
