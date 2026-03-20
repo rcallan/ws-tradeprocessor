@@ -57,16 +57,21 @@ public:
             SymbolState& state = symbolStates[symbol];
             state.trades.push_back(item);
 
+            // could probably move this to a config file
             int windowSize = 10;
             long ts = item["t"].asInt64();
-            auto now = Clock::now();
+            auto now = std::chrono::system_clock::now();
             auto cutoff = now - std::chrono::minutes(windowSize);
+            // auto cutoff = now - std::chrono::seconds(windowSize);
 
             long cutoff_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                 cutoff.time_since_epoch()
             ).count();
 
+            // spdlog::info("cutoff_ms is {} and front of deque time is {}", cutoff_ms, state.trades.front()["t"].asInt64());
+
             while (!state.trades.empty() && state.trades.front()["t"].asInt64() < cutoff_ms) {
+                // spdlog::info("a trade entry expired, removing from deque");
                 state.trades.pop_front();
             }
         }
