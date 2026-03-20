@@ -23,6 +23,18 @@ struct SymbolState {
 
     MaxGapState maxGapState;
     WAPState wapState;
+
+    void resetFeatures() {
+        features.maxGap = 0.0;
+        features.maxPrice = 0.0;
+        features.tps = 0.0;
+        features.vol = 0.0;
+        features.weightedAvgPrice = 0.0;
+
+        maxGapState.prevTime = 0;
+        wapState.numer = 0.0;
+        wapState.denom = 0.0;
+    }
 };
 
 #endif

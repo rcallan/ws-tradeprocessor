@@ -18,6 +18,7 @@
 #include "StreamProcessor.hpp"
 #include "SymbolState.hpp"
 #include "Features.hpp"
+#include "Scheduler.hpp"
 
 int main(int argc, const char* argv[]) {
     // auto logger = spdlog::basic_logger_mt("daily_logger", "logs/daily-log.txt");
@@ -54,22 +55,30 @@ int main(int argc, const char* argv[]) {
         TradespersecCalc
     > CalcTypes;
 
-    // should probably switch to a concurrent map like parlay_hash since processing threads could be reading from it
-    // while a processing thread is writing
     std::unordered_map<std::string, SymbolState> symbolStateMap;
+    // should prevent rehashing for number of symbols we would like to use
+    symbolStateMap.reserve(1000);
 
-    StreamProcessor<CalcTypes> sp(symbolStateMap);
+    using MyProcessor = StreamProcessor<CalcTypes>;
+
+    MyProcessor sp(symbolStateMap);
 
     // process items which have been submitted to the queue
     // could spawn more processing threads if the queue needs to be processed more quickly
-    pool.enqueue_detach(&StreamProcessor<CalcTypes>::process, std::ref(sp), std::ref(q));
+    pool.enqueue_detach(&MyProcessor::process, std::ref(sp), std::ref(q));
 
+    Scheduler<MyProcessor> scheduler(sp);
+
+    scheduler.start();
+
+    // could probably adjust this so it writes to a db at some time interval
     while (true) {
-        std::this_thread::sleep_for(std::chrono::seconds(10));
+        std::this_thread::sleep_for(std::chrono::seconds(20));
         spdlog::info("approximate size of the queue so far is {}", q.size_approx());
         for (auto& [k, v] : symbolStateMap) {
             Features snapshot;
 
+            // we take a snapshot so lock is not held while logging
             {
                 std::lock_guard lock(v.m);
                 snapshot = v.features;
@@ -87,6 +96,8 @@ int main(int argc, const char* argv[]) {
         }
         std::cout << std::endl;
     }
+
+    scheduler.stop();
 
     return 0;
 }

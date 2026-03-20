@@ -51,23 +51,44 @@ public:
         while (true) {
             q.wait_dequeue(item);
 
-            // std::cout << "processing new entry " << item["s"] << " " << item["t"] << " " << item["v"] << std::endl;
+            spdlog::debug("processing new entry {} {} {}", item["s"].asString(), item["t"].asInt64(), item["v"].asInt64());
 
             const std::string& symbol = item["s"].asString();
             SymbolState& state = symbolStates[symbol];
             state.trades.push_back(item);
 
-            tupleProcess(item, state);
+            int windowSize = 10;
+            long ts = item["t"].asInt64();
+            auto now = Clock::now();
+            auto cutoff = now - std::chrono::minutes(windowSize);
+
+            long cutoff_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                cutoff.time_since_epoch()
+            ).count();
+
+            while (!state.trades.empty() && state.trades.front()["t"].asInt64() < cutoff_ms) {
+                state.trades.pop_front();
+            }
+        }
+    }
+
+    void computeFeatures() {
+        for (auto& [k, v] : symbolStates) {
+            std::lock_guard<std::mutex> lock(v.m);
+
+            v.resetFeatures();
+
+            tupleProcess(v);
         }
     }
 
     template <int n = std::tuple_size<T>::value>
-    inline void tupleProcess(Json::Value& entry, SymbolState& state) {
+    inline void tupleProcess(SymbolState& state) {
         if constexpr (n > 1) {
-            tupleProcess<n - 1>(entry, state);
+            tupleProcess<n - 1>(state);
         }
         
-        std::get<n - 1>(calcs).process(entry, state);
+        std::get<n - 1>(calcs).process(state);
     }
 
 private:
