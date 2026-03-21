@@ -1,7 +1,6 @@
 #ifndef ____Scheduler__
 #define ____Scheduler__
 
-#include <atomic>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -17,46 +16,35 @@ public:
     Scheduler(auto& _sp) : sp(_sp) { }
 
     void start() {
-        worker = std::thread(&Scheduler::run, this);
+        worker = std::jthread(&Scheduler::run, this);
     }
 
     void stop() {
-        running.store(false);
-        cv.notify_one();
-        if (worker.joinable()) {
-            worker.join();
-        }
+        worker.request_stop();
+        cv.notify_one();  // wake if waiting
     }
 
 private:
-    std::atomic<bool> running{true};
     std::mutex mtx;
-    std::condition_variable cv;
-    std::thread worker;
+    std::condition_variable_any cv;  // must be condition_variable_any
+    std::jthread worker;
     Processor& sp;
 
-    void run() {
+    void run(std::stop_token st) {
         using namespace std::chrono;
 
-        // auto interval = minutes(1);
         auto interval = seconds(10);
-
-        // align to next boundary (steady clock)
         auto next_tick = steady_clock::now() + interval;
 
         std::unique_lock<std::mutex> lock(mtx);
 
-        while (running.load()) {
-            // wait until next_tick OR until notified (e.g. shutdown)
-            if (cv.wait_until(lock, next_tick, [this]() {
-                    return !running.load();
+        while (!st.stop_requested()) {
+
+            if (cv.wait_until(lock, st, next_tick, [&st]() {
+                    return st.stop_requested();
                 })) {
-                // woke due to stop signal
                 break;
             }
-
-            // timeout → scheduled tick reached
-            if (!running.load()) break;
 
             lock.unlock();
 
@@ -64,11 +52,9 @@ private:
 
             lock.lock();
 
-            // schedule next tick
             next_tick += interval;
         }
     }
-
 };
 
 #endif

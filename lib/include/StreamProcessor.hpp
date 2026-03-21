@@ -68,8 +68,6 @@ public:
                 cutoff.time_since_epoch()
             ).count();
 
-            // spdlog::info("cutoff_ms is {} and front of deque time is {}", cutoff_ms, state.trades.front()["t"].asInt64());
-
             while (!state.trades.empty() && state.trades.front()["t"].asInt64() < cutoff_ms) {
                 // spdlog::info("a trade entry expired, removing from deque");
                 state.trades.pop_front();
