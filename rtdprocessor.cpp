@@ -52,7 +52,8 @@ int main(int argc, const char* argv[]) {
         VolumeCalc, 
         WeightedAvgPriceCalc, 
         MaxPriceCalc, 
-        TradespersecCalc
+        TradespersecCalc,
+        TickImbalanceCalc
     > CalcTypes;
 
     std::unordered_map<std::string, SymbolState> symbolStateMap;
@@ -85,13 +86,14 @@ int main(int argc, const char* argv[]) {
             }
 
             spdlog::info(
-                "{:<15} | max gap: {:>11.2f} ms | vol: {:>10.2f} | WAP: {:>10.2f} | max price: {:>10.2f} | TPS: {:>8.2f}",
+                "{:<15} | max gap: {:>11.2f} ms | vol: {:>10.2f} | WAP: {:>10.2f} | max price: {:>10.2f} | TPS: {:>8.2f} | TI: {:>6.4f}",
                 k,
                 snapshot.maxGap,
                 snapshot.vol,
                 snapshot.weightedAvgPrice,
                 snapshot.maxPrice,
-                snapshot.tps
+                snapshot.tps,
+                snapshot.tickImbalance
             );
         }
         std::cout << std::endl;

@@ -16,6 +16,11 @@ struct WAPState {
     double denom = 0.0;
 };
 
+struct TIState {
+    int upticks = 0;
+    int downticks = 0;
+};
+
 struct SymbolState {
     std::mutex m;
     std::deque<Json::Value> trades;
@@ -23,6 +28,7 @@ struct SymbolState {
 
     MaxGapState maxGapState;
     WAPState wapState;
+    TIState tiState;
 
     void resetFeatures() {
         features.maxGap = 0.0;
@@ -30,6 +36,7 @@ struct SymbolState {
         features.tps = 0.0;
         features.vol = 0.0;
         features.weightedAvgPrice = 0.0;
+        features.tickImbalance = 0.0;
 
         maxGapState.prevTime = 0;
         wapState.numer = 0.0;
