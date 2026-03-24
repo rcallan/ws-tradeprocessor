@@ -14,31 +14,36 @@
 
 namespace po = boost::program_options;
 
-WSSession::WSSession(std::string fileName, std::condition_variable& cv_, moodycamel::BlockingConcurrentQueue<Json::Value>& q_) : cv(cv_), q(q_) {
-    // lggr = spdlog::create<spdlog::daily_file_sink_st>("daily_logger", "logs/daily-log.txt");
-
+WSSession::WSSession(std::string fileName,
+                     std::condition_variable& cv_,
+                     moodycamel::BlockingConcurrentQueue<Json::Value>& q_,
+                     std::stop_token st) 
+    : cv(cv_), q(q_), stop_token_(st) {
     po::options_description config("Configuration");
     config.add_options()
-        ("API_Token", po::value<std::string>()->default_value(""), "API Key assigned by Finnhub");
-    config.add_options()
-        ("Symbol_List", po::value<std::vector<std::string> >()->multitoken(), "List of Sysmbols to be subscribed");
-    
+        ("API_Token", po::value<std::string>()->required(), "API Key")
+        ("Symbol_List", po::value<std::vector<std::string>>()->multitoken()->required(), "Symbols");
+
     po::variables_map vm;
 
     std::ifstream ifs(fileName);
-    if (ifs) {
-        std::cout << "parsing config file" << std::endl;
-        boost::program_options::store(boost::program_options::parse_config_file(ifs, config), vm);
-        boost::program_options::notify(vm);
+    if (!ifs) {
+        throw std::runtime_error("Failed to open config file: " + fileName);
+    }
+
+    try {
+        po::store(po::parse_config_file(ifs, config), vm);
+        po::notify(vm);
+    } catch (const std::exception& e) {
+        std::cerr << "Config error: " << e.what() << std::endl;
+        throw;
     }
 
     token = vm["API_Token"].as<std::string>();
 
     for (auto& symbol : vm["Symbol_List"].as<std::vector<std::string>>()) {
-        // logger_->info("Subscribing to the symbol [{}]", symbol);
-        subscriptions.push_back("{\"type\":\"subscribe\",\"symbol\":\"" + symbol +"\"}");
+        subscriptions.push_back("{\"type\":\"subscribe\",\"symbol\":\"" + symbol + "\"}");
     }
-
 }
 
 typedef std::shared_ptr<boost::asio::ssl::context> context_ptr;
@@ -118,10 +123,22 @@ void WSSession::connect() {
         // exchanged until the event loop starts running in the next line.
         c.connect(con);        
 
-        // Start the ASIO io_service run loop
-        // this will cause a single connection to be made to the server. c.run()
-        // will exit when this connection is closed.
-        c.run();
+        std::jthread io_thread([this](std::stop_token st) {
+            // Run until stop is requested OR connection ends
+            while (!st.stop_requested()) {
+                c.poll();  // non-blocking alternative to run()
+            }
+        });
+
+        // Wait until stop requested
+        while (!stop_token_.stop_requested()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+
+        // Trigger shutdown
+        c.close(hdl, websocketpp::close::status::going_away, "shutdown", ec);
+
+        c.stop(); // ensures run/poll exits
     } catch (websocketpp::exception const & e) {
         std::cout << "error encountered within the subscribe function" << std::endl;
         std::cout << e.what() << std::endl;

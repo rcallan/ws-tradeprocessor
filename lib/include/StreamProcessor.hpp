@@ -9,6 +9,7 @@
 #include <set>
 #include <memory>
 #include "SymbolState.hpp"
+#include <atomic>
 
 #include <json/json.h>
 
@@ -38,41 +39,55 @@ template<tuple_like T>
 class StreamProcessor {
 public:
     StreamProcessor() = delete;
-    StreamProcessor(auto& cim) : symbolStates(cim) { }
+    StreamProcessor(auto& cim, moodycamel::BlockingConcurrentQueue<Json::Value>& _q) : symbolStates(cim), q(_q) { }
     StreamProcessor(auto& cim, auto cs) : calcs(cs), symbolStates(cim) { }
     StreamProcessor(std::string& rp, auto& cim) : readPath(rp), symbolStates(cim) { }
     StreamProcessor(std::string& rp, auto& cim, auto cs) : readPath(rp), calcs(cs), symbolStates(cim) { }
 
     void setCalcs(auto cs) {calcs = cs;}
 
-    void process(moodycamel::BlockingConcurrentQueue<Json::Value>& q) {
+    void start(std::stop_token st) {
+        worker = std::jthread([this, st](std::stop_token) {
+            process(st);
+        });
+    }
+
+    void stop() {
+        if (worker.joinable()) {
+            worker.request_stop();
+        }
+    }
+
+    void process(std::stop_token st) {
         Json::Value item;
         
-        while (true) {
-            q.wait_dequeue(item);
+        while (!st.stop_requested()) {
+            if (q.wait_dequeue_timed(item, std::chrono::milliseconds(50))) {
+                spdlog::debug("processing new entry {} {} {}", item["s"].asString(), item["t"].asInt64(), item["v"].asInt64());
 
-            spdlog::debug("processing new entry {} {} {}", item["s"].asString(), item["t"].asInt64(), item["v"].asInt64());
+                const std::string& symbol = item["s"].asString();
+                SymbolState& state = symbolStates[symbol];
+                state.trades.push_back(item);
 
-            const std::string& symbol = item["s"].asString();
-            SymbolState& state = symbolStates[symbol];
-            state.trades.push_back(item);
+                // could probably move this to a config file
+                int windowSize = 10;
+                long ts = item["t"].asInt64();
+                auto now = std::chrono::system_clock::now();
+                auto cutoff = now - std::chrono::minutes(windowSize);
+                // auto cutoff = now - std::chrono::seconds(windowSize);
 
-            // could probably move this to a config file
-            int windowSize = 10;
-            long ts = item["t"].asInt64();
-            auto now = std::chrono::system_clock::now();
-            auto cutoff = now - std::chrono::minutes(windowSize);
-            // auto cutoff = now - std::chrono::seconds(windowSize);
+                long cutoff_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    cutoff.time_since_epoch()
+                ).count();
 
-            long cutoff_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                cutoff.time_since_epoch()
-            ).count();
-
-            while (!state.trades.empty() && state.trades.front()["t"].asInt64() < cutoff_ms) {
-                // spdlog::info("a trade entry expired, removing from deque");
-                state.trades.pop_front();
+                while (!state.trades.empty() && state.trades.front()["t"].asInt64() < cutoff_ms) {
+                    // spdlog::info("a trade entry expired, removing from deque");
+                    state.trades.pop_front();
+                }
             }
         }
+
+        spdlog::info("shutting down processor");
     }
 
     void computeFeatures() {
@@ -100,6 +115,9 @@ private:
 
     std::unordered_map<std::string, SymbolState>& symbolStates;
     std::vector<std::string> mapKeys;
+
+    moodycamel::BlockingConcurrentQueue<Json::Value>& q;
+    std::jthread worker;
 };
 
 #endif

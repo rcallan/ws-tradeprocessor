@@ -11,10 +11,11 @@
 #include <condition_variable>
 #include <mutex>
 #include <memory>
+#include <stop_token>
 
 class WSSession {
 public:
-    WSSession(std::string cfgName, std::condition_variable& cv_, moodycamel::BlockingConcurrentQueue<Json::Value>& q_);
+    WSSession(std::string cfgName, std::condition_variable& cv_, moodycamel::BlockingConcurrentQueue<Json::Value>& q_, std::stop_token st);
 
     void connect();
     void subscribe();
@@ -29,4 +30,5 @@ private:
     std::vector<std::string> subscriptions;
     std::condition_variable& cv;
     moodycamel::BlockingConcurrentQueue<Json::Value>& q;
+    std::stop_token stop_token_;
 };

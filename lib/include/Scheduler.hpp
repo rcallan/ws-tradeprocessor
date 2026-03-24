@@ -15,8 +15,10 @@ public:
     Scheduler() = default;
     Scheduler(auto& _sp) : sp(_sp) { }
 
-    void start() {
-        worker = std::jthread(&Scheduler::run, this);
+    void start(std::stop_token st) {
+        worker = std::jthread([this, st](std::stop_token) {
+            run(st);
+        });
     }
 
     void stop() {
@@ -26,7 +28,7 @@ public:
 
 private:
     std::mutex mtx;
-    std::condition_variable_any cv;  // must be condition_variable_any
+    std::condition_variable_any cv;
     std::jthread worker;
     Processor& sp;
 
@@ -54,6 +56,8 @@ private:
 
             next_tick += interval;
         }
+
+        spdlog::info("shutting down scheduler");
     }
 };
 

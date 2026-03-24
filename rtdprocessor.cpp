@@ -4,6 +4,8 @@
 #include <thread>
 #include <condition_variable>
 #include <mutex>
+#include <stop_token>
+#include <thread>
 
 #include <thread_pool/thread_pool.h>
 #include <thread_pool/version.h>
@@ -20,7 +22,14 @@
 #include "Features.hpp"
 #include "Scheduler.hpp"
 
+std::stop_source stopSource;
+
+void handle_sigint(int) {
+    stopSource.request_stop();
+}
+
 int main(int argc, const char* argv[]) {
+    std::signal(SIGINT, handle_sigint);
     // auto logger = spdlog::basic_logger_mt("daily_logger", "logs/daily-log.txt");
     // logger->info("===== starting application =====");
     unsigned threadCount = std::thread::hardware_concurrency();
@@ -38,9 +47,13 @@ int main(int argc, const char* argv[]) {
     moodycamel::BlockingConcurrentQueue<Json::Value> q;
     spdlog::info("is the queue lock free on this platform {}", q.is_lock_free());
 
-    WSSession sess(argv[1], condVar, q);
+    auto token = stopSource.get_token();
+    
     // forms a ws connection with the finhubb server and starts the ASIO io_service run loop
-    pool.enqueue_detach(&WSSession::connect, std::ref(sess));
+    std::jthread ws_thread([&](std::stop_token) {
+        WSSession sess(argv[1], condVar, q, token);
+        sess.connect();
+    });
 
     // we wait until we are subscribed before continuing
     std::unique_lock<std::mutex> lck(mtx);
@@ -62,44 +75,53 @@ int main(int argc, const char* argv[]) {
 
     using MyProcessor = StreamProcessor<CalcTypes>;
 
-    MyProcessor sp(symbolStateMap);
-
-    // process items which have been submitted to the queue
-    // could spawn more processing threads if the queue needs to be processed more quickly
-    pool.enqueue_detach(&MyProcessor::process, std::ref(sp), std::ref(q));
-
+    MyProcessor sp(symbolStateMap, q);
     Scheduler<MyProcessor> scheduler(sp);
 
-    scheduler.start();
+    sp.start(token);
 
-    // could probably adjust this so it writes to a db at some time interval
-    while (true) {
-        std::this_thread::sleep_for(std::chrono::seconds(20));
-        spdlog::info("approximate size of the queue so far is {}", q.size_approx());
-        for (auto& [k, v] : symbolStateMap) {
-            Features snapshot;
+    spdlog::info("stream processor started");
 
-            // we take a snapshot so lock is not held while logging
-            {
-                std::lock_guard lock(v.m);
-                snapshot = v.features;
+    scheduler.start(token);
+
+    spdlog::info("scheduler started");
+
+    std::jthread loggerThread([&](std::stop_token) {
+        while (!token.stop_requested()) {
+            for (int i = 0; i < 200 && !token.stop_requested(); ++i) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
 
-            spdlog::info(
-                "{:<15} | max gap: {:>11.2f} ms | vol: {:>10.2f} | WAP: {:>10.2f} | max price: {:>10.2f} | TPS: {:>8.2f} | TI: {:>6.4f}",
-                k,
-                snapshot.maxGap,
-                snapshot.vol,
-                snapshot.weightedAvgPrice,
-                snapshot.maxPrice,
-                snapshot.tps,
-                snapshot.tickImbalance
-            );
-        }
-        std::cout << std::endl;
-    }
+            if (token.stop_requested()) {
+                spdlog::info("Shutdown signal received, stopping..");
+                break;
+            }
 
-    scheduler.stop();
+            spdlog::info("approximate size of the queue so far is {}", q.size_approx());
+
+            for (auto& [k, v] : symbolStateMap) {
+                Features snapshot;
+
+                {
+                    std::lock_guard lock(v.m);
+                    snapshot = v.features;
+                }
+
+                spdlog::info(
+                    "{:<15} | max gap: {:>11.2f} ms | vol: {:>10.2f} | WAP: {:>10.2f} | max price: {:>10.2f} | TPS: {:>8.2f} | TI: {:>6.4f}",
+                    k,
+                    snapshot.maxGap,
+                    snapshot.vol,
+                    snapshot.weightedAvgPrice,
+                    snapshot.maxPrice,
+                    snapshot.tps,
+                    snapshot.tickImbalance
+                );
+            }
+
+            std::cout << std::endl;
+        }
+    });
 
     return 0;
 }
